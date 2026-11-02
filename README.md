@@ -60,7 +60,7 @@ The administrator login is driven by `.env`. On startup the account matching `BO
 ## Business profile and product pictures
 Sign in as an administrator, open **Dashboard → Business profile**, and change the business name or upload/replace the profile picture. The new name and picture appear on public pages immediately.
 
-On **Products**, the administrator can attach a picture while adding an item and can replace a product picture later. Supported formats are PNG, JPG/JPEG, GIF and WEBP up to 5 MB. Uploaded files are validated and stored under `app/static/uploads/business` and `app/static/uploads/products`; these folders are excluded from git.
+On **Products**, the administrator can attach a picture while adding an item and can replace a product picture later. Supported formats are PNG, JPG/JPEG, GIF and WEBP up to 5 MB. Files are validated (extension, size and real image signature) and stored in the `uploaded_file` PostgreSQL table, then served from `/uploads/<folder>/<name>`. Storing images in the database keeps them available on read-only serverless filesystems such as Vercel, where the project directory cannot be written to.
 
 ## Moving existing SQLite data
 Earlier versions used SQLite. To copy that data into PostgreSQL after setting `DATABASE_URL`, run:
@@ -77,3 +77,62 @@ The script reads `instance/pub_grill.db` by default, clears the matching Postgre
 - Automatic room availability is computed from reservation overlap and maintenance blocks. A room marked available does not override a conflicting reservation.
 - Add automated tests, HTTPS, production Socket.IO configuration, rate limiting, backups, email verification and password-reset delivery before production use.
 - Alcohol sales must follow applicable legal age requirements and business policies.
+
+## Deployment (Vercel + Neon PostgreSQL)
+
+Production URL: <https://pub-grill-resort.vercel.app>
+
+The app runs on Vercel as a Python service (`vercel.json` → `wsgi.py`) with a Neon PostgreSQL database.
+
+### Environment variables
+Set these in **Vercel → Project → Settings → Environment Variables** for both Production and Preview. Do not commit real values.
+
+| Variable | Purpose |
+| --- | --- |
+| `SECRET_KEY` | Long random Flask session/CSRF secret. Generate with `python -c 'import secrets; print(secrets.token_hex(32))'`. |
+| `DATABASE_URL` | Neon connection string (use the pooled `-pooler` host and `sslmode=require`). |
+| `BUSINESS_NAME` | Business name shown across the site. |
+| `CURRENCY` | Display currency, e.g. `KES`. |
+| `TIMEZONE` | Application timezone, e.g. `Africa/Nairobi`. |
+| `BOOTSTRAP_ADMIN_NAME` | Administrator display name. |
+| `BOOTSTRAP_ADMIN_EMAIL` | Administrator login email. |
+| `BOOTSTRAP_ADMIN_PASSWORD` | Administrator password. Mark as **Sensitive** in Vercel. |
+| `COOKIE_SECURE` | `true` in production. |
+| `REALTIME_ENABLED` | `false` on Vercel; Socket.IO is disabled on serverless. |
+| `AUTO_CREATE_TABLES` | `true` to create missing tables on startup. |
+| `TRUSTED_HOSTS` | Comma-separated allowed hostnames (`.vercel.app,<custom-domain>`). |
+
+`VERCEL` is set automatically by the platform and switches the app to serverless mode: secure cookies, `NullPool` for the Neon pooler, no Socket.IO, and no writable `instance/` directory.
+
+### Administrator account
+The bootstrap variables are authoritative on every start: the matching account is created if missing, promoted to admin, and its password is reset if it no longer matches `BOOTSTRAP_ADMIN_PASSWORD`. Keep these variables set in Vercel so the production admin login stays stable, and keep the password in a password manager. The password is not recorded in this repository.
+
+### Database setup
+The schema and administrator are created automatically on app startup when `AUTO_CREATE_TABLES=true`. To prepare the database from a machine with network access to Neon, export the same `DATABASE_URL`, then start the app once locally:
+
+```bash
+export DATABASE_URL='postgresql+psycopg://...sslmode=require'
+python run.py
+```
+
+To copy local SQLite data into PostgreSQL:
+
+```bash
+python scripts/migrate_sqlite_to_postgres.py
+```
+
+Give the application a dedicated, least-privilege database role rather than the Neon owner role.
+
+### Deploying and linking Git
+```bash
+vercel link          # link this directory to the Vercel project
+vercel --prod        # deploy manually
+vercel git connect https://github.com/WesongaGodfrey254/Pub_grill_resort_system
+```
+`vercel git connect` requires the Vercel GitHub App to have access to the repository. If it reports that the GitHub integration is not installed, open <https://github.com/apps/vercel>, choose **Configure**, and grant the app access to `Pub_grill_resort_system`. After that, pushes to `main` deploy automatically.
+
+### Health check
+`GET /healthz` returns `200` with `{"status": "ok"}` when the app and database are reachable. Use it for uptime monitoring.
+
+### Custom domain
+`pub_grill_resort.com` is not a valid DNS name (underscores are not allowed) and is not registered. Register a valid domain such as `pubgrillresort.com`, then add it in **Vercel → Project → Settings → Domains** (or `vercel domains add`), point the DNS records Vercel shows at the project, and add the hostname to `TRUSTED_HOSTS`. HTTPS is issued automatically once DNS resolves.
