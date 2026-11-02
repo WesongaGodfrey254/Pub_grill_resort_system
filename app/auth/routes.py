@@ -1,10 +1,20 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash
 from flask_login import login_user, logout_user, current_user
 from sqlalchemy import func
+from urllib.parse import urlsplit
 from ..extensions import db
 from ..models import User, AuditLog
 
 auth_bp = Blueprint("auth", __name__)
+
+def _safe_next(target):
+    """Only allow same-site relative redirects after login."""
+    if not target or not target.startswith("/") or target.startswith("//"):
+        return None
+    parts = urlsplit(target)
+    if parts.scheme or parts.netloc:
+        return None
+    return target
 
 @auth_bp.route("/register", methods=["GET", "POST"])
 def register():
@@ -47,7 +57,7 @@ def login():
             login_user(user, remember=bool(request.form.get("remember")))
             db.session.add(AuditLog(user_id=user.id, action="login", entity_type="user", entity_id=str(user.id)))
             db.session.commit()
-            return redirect(request.args.get("next") or url_for("main.dashboard"))
+            return redirect(_safe_next(request.args.get("next")) or url_for("main.dashboard"))
     return render_template("auth/login.html")
 
 @auth_bp.post("/logout")

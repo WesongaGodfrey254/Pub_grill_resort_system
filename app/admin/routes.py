@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 from flask import Blueprint, render_template, request, redirect, url_for, flash, abort, current_app
 from flask_login import login_required, current_user
 from sqlalchemy import func
-from ..extensions import db, socketio
+from ..extensions import db, emit_event
 from ..models import User, Category, Product, Order, OrderItem, Room, RoomBooking, RoomBlock, RestaurantTable, AuditLog, InventoryMovement, Notification, OrderStatusHistory, BusinessProfile
 from ..uploads import save_image, delete_image, ImageUploadError
 
@@ -124,6 +124,7 @@ def update_product(product_id):
         db.session.commit()
         if new_image:
             delete_image(old_image)
+            db.session.commit()
         flash("Product updated.", "success")
     except ImageUploadError as exc:
         db.session.rollback()
@@ -164,6 +165,7 @@ def business_profile():
             db.session.commit()
             if new_logo or remove_logo:
                 delete_image(old_logo)
+                db.session.commit()
             flash("Business profile updated.", "success")
             return redirect(url_for("admin.business_profile"))
         except ImageUploadError as exc:
@@ -252,9 +254,9 @@ def update_order_status(order_id):
     order.status_history.append(OrderStatusHistory(status=status, changed_by=current_user.id))
     audit("order_status_changed", "order", order.id, status)
     db.session.commit()
-    socketio.emit("order_status_changed", {"order_id": order.id, "order_number": order.order_number, "status": status},
+    emit_event("order_status_changed", {"order_id": order.id, "order_number": order.order_number, "status": status},
                   to=f"user:{order.customer_id}")
-    socketio.emit("order_updated", {"order_id": order.id, "order_number": order.order_number, "status": status},
+    emit_event("order_updated", {"order_id": order.id, "order_number": order.order_number, "status": status},
                   to="staff")
     flash("Order status updated.", "success")
     return redirect(request.referrer or url_for("admin.orders"))
@@ -295,7 +297,7 @@ def room_status(room_id):
     room.status = status
     audit("room_status_changed", "room", room.id, status)
     db.session.commit()
-    socketio.emit("room_availability_changed", {"room_id": room.id, "status": status})
+    emit_event("room_availability_changed", {"room_id": room.id, "status": status})
     flash("Room status updated.", "success")
     return redirect(url_for("admin.rooms"))
 

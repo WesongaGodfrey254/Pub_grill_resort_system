@@ -43,6 +43,19 @@ class BusinessProfile(db.Model):
     logo_path = db.Column(db.String(255))
     updated_at = db.Column(db.DateTime, default=utcnow, onupdate=utcnow, nullable=False)
 
+class UploadedFile(db.Model):
+    """Image bytes stored in PostgreSQL because serverless disks are ephemeral."""
+    id = db.Column(db.Integer, primary_key=True)
+    folder = db.Column(db.String(40), nullable=False, index=True)
+    filename = db.Column(db.String(80), unique=True, nullable=False, index=True)
+    mimetype = db.Column(db.String(60), nullable=False)
+    data = db.Column(db.LargeBinary, nullable=False)
+    created_at = db.Column(db.DateTime, default=utcnow, nullable=False)
+
+    @property
+    def path(self):
+        return f"uploads/{self.folder}/{self.filename}"
+
 class Category(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(80), unique=True, nullable=False)

@@ -1,11 +1,36 @@
-from flask import Blueprint, render_template, redirect, url_for
+from io import BytesIO
+from flask import Blueprint, render_template, redirect, url_for, abort, send_file
 from flask_login import current_user
-from ..models import Category, Product, Order, Room, RoomBooking, User
+from sqlalchemy import func, text
+from ..models import Category, Product, Order, Room, RoomBooking, User, UploadedFile
 from ..extensions import db
-from sqlalchemy import func
 from datetime import datetime
 
 main_bp = Blueprint("main", __name__)
+
+@main_bp.get("/healthz")
+def healthz():
+    try:
+        db.session.execute(text("SELECT 1"))
+        return {"status": "ok"}
+    except Exception:
+        db.session.rollback()
+        return {"status": "unavailable"}, 503
+
+@main_bp.get("/uploads/<folder>/<filename>")
+def uploaded_file(folder, filename):
+    record = UploadedFile.query.filter_by(folder=folder, filename=filename).first()
+    if record is None:
+        abort(404)
+    response = send_file(
+        BytesIO(record.data),
+        mimetype=record.mimetype,
+        download_name=record.filename,
+        max_age=31536000,
+        conditional=True,
+    )
+    response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+    return response
 
 @main_bp.route("/")
 def index():

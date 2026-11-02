@@ -1,0 +1,25 @@
+# Never upload local secrets or development artifacts to Vercel.
+.env
+.env.*
+!.env.example
+.deploy/
+.vercel/
+venv/
+.venv/
+instance/
+__pycache__/
+*.py[cod]
+*.db
+*.sqlite
+*.sqlite3
+*.log
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.git/
+.github/
+tests/
+requirements-dev.txt
+docker-compose.yml
+Procfile
+scripts/

@@ -5,7 +5,7 @@
   <h2>Pub, grill & resort profile</h2>
   <div class="profile-preview">
     {% if profile.logo_path %}
-      <img class="profile-logo" src="{{ url_for('static', filename=profile.logo_path) }}" alt="{{ profile.name }} logo">
+      <img class="profile-logo" src="{{ media_url(profile.logo_path) }}" alt="{{ profile.name }} logo">
     {% else %}
       <div class="profile-logo profile-logo-placeholder">🍽</div>
     {% endif %}

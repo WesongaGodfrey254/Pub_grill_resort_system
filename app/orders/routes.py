@@ -2,7 +2,7 @@ from datetime import datetime
 from flask import Blueprint, render_template, request, redirect, url_for, flash, abort, jsonify
 from flask_login import login_required, current_user
 from sqlalchemy import func
-from ..extensions import db, socketio
+from ..extensions import db, emit_event
 from ..models import Category, Product, Order, OrderItem, OrderStatusHistory, Notification, AuditLog, InventoryMovement, RestaurantTable
 
 orders_bp = Blueprint("orders", __name__)
@@ -80,7 +80,7 @@ def create_order():
     data = {"id": order.id, "order_number": order.order_number, "customer": current_user.full_name,
             "status": order.status, "total": order.total_cents / 100,
             "items": [{"name": i.product_name_snapshot, "quantity": i.quantity} for i in order.items]}
-    socketio.emit("order_created", data, to="staff")
+    emit_event("order_created", data, to="staff")
     if request.is_json:
         return jsonify(message="Order placed successfully.", order=data), 201
     flash(f"Order {order.order_number} placed successfully.", "success")

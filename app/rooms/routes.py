@@ -2,7 +2,7 @@ from datetime import datetime, timedelta
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, abort
 from flask_login import login_required, current_user
 from sqlalchemy import and_
-from ..extensions import db, socketio
+from ..extensions import db, emit_event
 from ..models import Room, RoomBooking, RoomBlock, Notification, AuditLog
 
 rooms_bp = Blueprint("rooms", __name__)
@@ -95,7 +95,7 @@ def bookings():
             db.session.add(Notification(user_id=current_user.id, title="Booking confirmed", message=f"Reservation {reference} is confirmed."))
             db.session.add(AuditLog(user_id=current_user.id, action="room_booking_created", entity_type="booking", entity_id=str(booking.id)))
             db.session.commit()
-            socketio.emit("room_availability_changed", {"room_id": room.id, "status": "reserved"})
+            emit_event("room_availability_changed", {"room_id": room.id, "status": "reserved"})
             flash(f"Booking confirmed. Reference: {reference}. Payment is currently unpaid.", "success")
             return redirect(url_for("rooms.my_bookings"))
         except (ValueError, TypeError):
@@ -120,7 +120,7 @@ def cancel_booking(booking_id):
         booking.status = "cancelled"
         db.session.add(AuditLog(user_id=current_user.id, action="booking_cancelled", entity_type="booking", entity_id=str(booking.id)))
         db.session.commit()
-        socketio.emit("room_availability_changed", {"room_id": booking.room_id, "status": "available"})
+        emit_event("room_availability_changed", {"room_id": booking.room_id, "status": "available"})
         flash("Booking cancelled. Apply the business refund policy separately if payment was taken.", "success")
     return redirect(url_for("rooms.my_bookings"))
 
@@ -135,7 +135,7 @@ def check_in(booking_id):
         booking.status = "checked_in"; booking.actual_check_in_at = datetime.utcnow()
         db.session.add(AuditLog(user_id=current_user.id, action="guest_checked_in", entity_type="booking", entity_id=str(booking.id)))
         db.session.commit()
-        socketio.emit("room_availability_changed", {"room_id": booking.room_id, "status": "occupied"})
+        emit_event("room_availability_changed", {"room_id": booking.room_id, "status": "occupied"})
         flash("Guest checked in.", "success")
     return redirect(request.referrer or url_for("admin.rooms"))
 
@@ -150,6 +150,6 @@ def check_out(booking_id):
         booking.status = "completed"; booking.actual_check_out_at = datetime.utcnow()
         db.session.add(AuditLog(user_id=current_user.id, action="guest_checked_out", entity_type="booking", entity_id=str(booking.id)))
         db.session.commit()
-        socketio.emit("room_availability_changed", {"room_id": booking.room_id, "status": "available"})
+        emit_event("room_availability_changed", {"room_id": booking.room_id, "status": "available"})
         flash("Guest checked out. Room may require cleaning before reuse.", "success")
     return redirect(request.referrer or url_for("admin.rooms"))

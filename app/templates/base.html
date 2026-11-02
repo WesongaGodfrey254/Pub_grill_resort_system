@@ -4,12 +4,12 @@
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}{{ business_name }}{% endblock %}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-  <script src="https://cdn.socket.io/4.8.1/socket.io.min.js" defer></script>
+  {% if realtime_enabled %}<script src="https://cdn.socket.io/4.8.1/socket.io.min.js" defer></script>{% endif %}
   <script src="{{ url_for('static', filename='js/main.js') }}" defer></script>
 </head>
 <body>
 <header class="topbar">
-  <a class="brand" href="{{ url_for('main.index') }}">{% if business_logo %}<img class="brand-logo" src="{{ url_for('static', filename=business_logo) }}" alt="{{ business_name }} logo">{% else %}<span class="brand-mark">🍽</span>{% endif %}<span>{{ business_name }}</span></a>
+  <a class="brand" href="{{ url_for('main.index') }}">{% if business_logo %}<img class="brand-logo" src="{{ media_url(business_logo) }}" alt="{{ business_name }} logo">{% else %}<span class="brand-mark">🍽</span>{% endif %}<span>{{ business_name }}</span></a>
   <button class="menu-toggle" id="menuToggle" aria-label="Toggle navigation">☰</button>
   <nav id="mainNav">
     <a href="{{ url_for('main.index') }}">Home</a>
