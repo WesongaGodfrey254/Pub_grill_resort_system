@@ -6,3 +6,5 @@ instance/
 uploads/
 .pytest_cache/
 .coverage
+.vercel
+.env*

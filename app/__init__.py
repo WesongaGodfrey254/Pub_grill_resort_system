@@ -6,14 +6,15 @@ from flask import Flask, g, render_template, request, url_for
 from flask_login import current_user
 from werkzeug.middleware.proxy_fix import ProxyFix
 from .extensions import db, login_manager, csrf, socketio, migrate
-from config import Config
+from config import Config, IS_SERVERLESS
 
 def create_app(test_config=None):
     app = Flask(__name__, instance_relative_config=True)
     app.config.from_object(Config)
     if test_config:
         app.config.update(test_config)
-    Path(app.instance_path).mkdir(parents=True, exist_ok=True)
+    if not IS_SERVERLESS:
+        Path(app.instance_path).mkdir(parents=True, exist_ok=True)
 
     if not app.config.get("SECRET_KEY"):
         raise RuntimeError("SECRET_KEY must be configured in the production environment.")
