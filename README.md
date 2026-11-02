@@ -129,7 +129,7 @@ vercel link          # link this directory to the Vercel project
 vercel --prod        # deploy manually
 vercel git connect https://github.com/WesongaGodfrey254/Pub_grill_resort_system
 ```
-`vercel git connect` requires the Vercel GitHub App to have access to the repository. If it reports that the GitHub integration is not installed, open <https://github.com/apps/vercel>, choose **Configure**, and grant the app access to `Pub_grill_resort_system`. After that, pushes to `main` deploy automatically.
+`vercel git connect` requires the Vercel GitHub App to have access to the repository. If it reports that the GitHub integration is not installed, open <https://github.com/apps/vercel>, choose **Configure**, and grant the app access to `Pub_grill_resort_system`. After that, pushes to `main` deploy automatically. This repository is linked, so every push to `main` starts a production deployment.
 
 ### Health check
 `GET /healthz` returns `200` with `{"status": "ok"}` when the app and database are reachable. Use it for uptime monitoring.
