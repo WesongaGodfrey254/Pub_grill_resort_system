@@ -36,6 +36,13 @@ def load_user(user_id):
     except (TypeError, ValueError):
         return None
 
+class BusinessProfile(db.Model):
+    """Single-row settings record for the business name and logo."""
+    id = db.Column(db.Integer, primary_key=True, default=1)
+    name = db.Column(db.String(120), nullable=False)
+    logo_path = db.Column(db.String(255))
+    updated_at = db.Column(db.DateTime, default=utcnow, onupdate=utcnow, nullable=False)
+
 class Category(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(80), unique=True, nullable=False)

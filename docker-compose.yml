@@ -1,0 +1,21 @@
+services:
+  db:
+    image: postgres:18-alpine
+    container_name: pub_grill_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-pub_grill}
+      POSTGRES_USER: ${POSTGRES_USER:-pub_grill}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pub_grill}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pub_grill_pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-pub_grill} -d ${POSTGRES_DB:-pub_grill}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  pub_grill_pgdata:

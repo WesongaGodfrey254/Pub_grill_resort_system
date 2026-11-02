@@ -48,7 +48,14 @@ def create_app(test_config=None):
 
     @app.context_processor
     def inject_globals():
-        return {"business_name": app.config["BUSINESS_NAME"], "currency": app.config["CURRENCY"]}
+        from .models import BusinessProfile
+        profile = db.session.get(BusinessProfile, 1)
+        business_name = profile.name if profile and profile.name else app.config["BUSINESS_NAME"]
+        return {
+            "business_name": business_name,
+            "business_logo": profile.logo_path if profile else None,
+            "currency": app.config["CURRENCY"],
+        }
 
     @app.errorhandler(403)
     def forbidden(error):
@@ -67,6 +74,7 @@ def create_app(test_config=None):
         db.create_all()
         _bootstrap_admin(app)
         _seed_categories()
+        _bootstrap_business_profile(app)
 
     return app
 
@@ -120,6 +128,12 @@ def _bootstrap_admin(app):
     ))
     db.session.commit()
     app.logger.info("%s bootstrap administrator %s.", "Created" if created else "Synchronized", email)
+
+def _bootstrap_business_profile(app):
+    from .models import BusinessProfile
+    if db.session.get(BusinessProfile, 1) is None:
+        db.session.add(BusinessProfile(id=1, name=app.config["BUSINESS_NAME"]))
+        db.session.commit()
 
 def _seed_categories():
     from .models import Category

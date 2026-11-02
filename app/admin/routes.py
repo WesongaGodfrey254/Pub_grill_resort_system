@@ -1,10 +1,11 @@
 from functools import wraps
 from datetime import datetime, timedelta
-from flask import Blueprint, render_template, request, redirect, url_for, flash, abort
+from flask import Blueprint, render_template, request, redirect, url_for, flash, abort, current_app
 from flask_login import login_required, current_user
 from sqlalchemy import func
 from ..extensions import db, socketio
-from ..models import User, Category, Product, Order, OrderItem, Room, RoomBooking, RoomBlock, RestaurantTable, AuditLog, InventoryMovement, Notification, OrderStatusHistory
+from ..models import User, Category, Product, Order, OrderItem, Room, RoomBooking, RoomBlock, RestaurantTable, AuditLog, InventoryMovement, Notification, OrderStatusHistory, BusinessProfile
+from ..uploads import save_image, delete_image, ImageUploadError
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
 ORDER_STATES = {"pending", "accepted", "preparing", "ready", "served", "completed", "cancelled"}
@@ -72,6 +73,7 @@ def operations():
 def products():
     categories = Category.query.order_by(Category.name).all()
     if request.method == "POST":
+        image_path = None
         try:
             name = request.form.get("name", "").strip()
             category_id = int(request.form.get("category_id", ""))
@@ -81,8 +83,10 @@ def products():
             category = db.session.get(Category, category_id)
             if not name or not category or price < 0 or stock < 0 or reorder < 0:
                 raise ValueError()
+            image_path = save_image(request.files.get("image"), "products")
             p = Product(category_id=category_id, name=name, description=request.form.get("description", "").strip(),
-                        price_cents=price, cost_cents=0, stock_quantity=stock, reorder_level=reorder)
+                        price_cents=price, cost_cents=0, stock_quantity=stock, reorder_level=reorder,
+                        image_path=image_path)
             db.session.add(p); db.session.flush()
             audit("product_created", "product", p.id, name)
             if stock:
@@ -90,8 +94,13 @@ def products():
             db.session.commit()
             flash("Product added.", "success")
             return redirect(url_for("admin.products"))
+        except ImageUploadError as exc:
+            db.session.rollback()
+            delete_image(image_path)
+            flash(str(exc), "danger")
         except (ValueError, TypeError):
             db.session.rollback()
+            delete_image(image_path)
             flash("Check the product fields and enter valid non-negative numbers.", "danger")
     return render_template("admin/products.html", products=Product.query.order_by(Product.name).all(), categories=categories)
 
@@ -99,6 +108,8 @@ def products():
 @roles_required("admin")
 def update_product(product_id):
     p = db.get_or_404(Product, product_id)
+    new_image = None
+    old_image = p.image_path
     try:
         p.name = request.form.get("name", p.name).strip()
         p.price_cents = int(round(float(request.form.get("price", p.price_cents / 100)) * 100))
@@ -106,12 +117,64 @@ def update_product(product_id):
         p.is_available = request.form.get("is_available") == "on"
         if p.price_cents < 0 or p.stock_quantity < 0 or not p.name:
             raise ValueError()
+        new_image = save_image(request.files.get("image"), "products")
+        if new_image:
+            p.image_path = new_image
         audit("product_updated", "product", p.id, p.name)
         db.session.commit()
+        if new_image:
+            delete_image(old_image)
         flash("Product updated.", "success")
+    except ImageUploadError as exc:
+        db.session.rollback()
+        delete_image(new_image)
+        flash(str(exc), "danger")
     except (ValueError, TypeError):
-        db.session.rollback(); flash("Invalid product values.", "danger")
+        db.session.rollback()
+        delete_image(new_image)
+        flash("Invalid product values.", "danger")
     return redirect(url_for("admin.products"))
+
+@admin_bp.route("/business-profile", methods=["GET", "POST"])
+@roles_required("admin")
+def business_profile():
+    profile = db.session.get(BusinessProfile, 1)
+    if profile is None:
+        profile = BusinessProfile(id=1, name=current_app.config["BUSINESS_NAME"])
+        db.session.add(profile)
+        db.session.commit()
+
+    if request.method == "POST":
+        name = request.form.get("name", "").strip()
+        remove_logo = request.form.get("remove_logo") == "on"
+        new_logo = None
+        old_logo = profile.logo_path
+        try:
+            if not name:
+                raise ValueError("Enter the business name.")
+            if len(name) > 120:
+                raise ValueError("Business name must be 120 characters or fewer.")
+            new_logo = save_image(request.files.get("logo"), "business")
+            profile.name = name
+            if new_logo:
+                profile.logo_path = new_logo
+            elif remove_logo:
+                profile.logo_path = None
+            audit("business_profile_updated", "business_profile", profile.id, name)
+            db.session.commit()
+            if new_logo or remove_logo:
+                delete_image(old_logo)
+            flash("Business profile updated.", "success")
+            return redirect(url_for("admin.business_profile"))
+        except ImageUploadError as exc:
+            db.session.rollback()
+            delete_image(new_logo)
+            flash(str(exc), "danger")
+        except ValueError as exc:
+            db.session.rollback()
+            delete_image(new_logo)
+            flash(str(exc), "danger")
+    return render_template("admin/business_profile.html", profile=profile)
 
 @admin_bp.route("/categories", methods=["GET", "POST"])
 @roles_required("admin")

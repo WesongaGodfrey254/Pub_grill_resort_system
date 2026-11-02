@@ -1,0 +1,22 @@
+{% extends "base.html" %}{% block title %}Business profile · {{ business_name }}{% endblock %}
+{% block content %}
+<div class="page-heading"><div><p class="eyebrow">BUSINESS SETTINGS</p><h1>Business profile</h1><p>Change the name and profile picture shown across the site.</p></div></div>
+<section class="form-card wide">
+  <h2>Pub, grill & resort profile</h2>
+  <div class="profile-preview">
+    {% if profile.logo_path %}
+      <img class="profile-logo" src="{{ url_for('static', filename=profile.logo_path) }}" alt="{{ profile.name }} logo">
+    {% else %}
+      <div class="profile-logo profile-logo-placeholder">🍽</div>
+    {% endif %}
+    <div><strong>{{ profile.name }}</strong><small>This name and picture appear in the header, page titles and footer.</small></div>
+  </div>
+  <form method="post" class="form-grid" enctype="multipart/form-data">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label class="span-all">Business name<input name="name" value="{{ profile.name }}" maxlength="120" required></label>
+    <label class="span-all">Profile picture <small>PNG, JPG, GIF or WEBP · max 5 MB</small><input name="logo" type="file" accept="image/png,image/jpeg,image/gif,image/webp"></label>
+    {% if profile.logo_path %}<label class="checkbox-label"><input type="checkbox" name="remove_logo"> Remove the current picture</label>{% endif %}
+    <button class="btn primary">Save profile</button>
+  </form>
+</section>
+{% endblock %}

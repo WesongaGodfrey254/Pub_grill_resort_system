@@ -9,7 +9,7 @@
 </head>
 <body>
 <header class="topbar">
-  <a class="brand" href="{{ url_for('main.index') }}">🍽 {{ business_name }}</a>
+  <a class="brand" href="{{ url_for('main.index') }}">{% if business_logo %}<img class="brand-logo" src="{{ url_for('static', filename=business_logo) }}" alt="{{ business_name }} logo">{% else %}<span class="brand-mark">🍽</span>{% endif %}<span>{{ business_name }}</span></a>
   <button class="menu-toggle" id="menuToggle" aria-label="Toggle navigation">☰</button>
   <nav id="mainNav">
     <a href="{{ url_for('main.index') }}">Home</a>
