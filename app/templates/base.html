@@ -13,12 +13,17 @@
   <button class="menu-toggle" id="menuToggle" aria-label="Toggle navigation">☰</button>
   <nav id="mainNav">
     <a href="{{ url_for('main.index') }}">Home</a>
-    <a href="{{ url_for('orders.menu') }}">Food & Drinks</a>
-    <a href="{{ url_for('rooms.list_rooms') }}">Rooms</a>
+    {% set is_staff = current_user.is_authenticated and current_user.role != 'customer' %}
+    {% if not is_staff %}
+      <a href="{{ url_for('orders.menu') }}">Food & Drinks</a>
+      <a href="{{ url_for('rooms.list_rooms') }}">Rooms</a>
+    {% endif %}
     {% if current_user.is_authenticated %}
-      <a href="{{ url_for('orders.cart') }}">Cart <span id="cartCount" class="badge">0</span></a>
-      <a href="{{ url_for('orders.my_orders') }}">My Orders</a>
-      <a href="{{ url_for('rooms.my_bookings') }}">My Bookings</a>
+      {% if not is_staff %}
+        <a href="{{ url_for('orders.cart') }}">Cart <span id="cartCount" class="badge">0</span></a>
+        <a href="{{ url_for('orders.my_orders') }}">My Orders</a>
+        <a href="{{ url_for('rooms.my_bookings') }}">My Bookings</a>
+      {% endif %}
       {% if current_user.role in ['admin','supervisor'] %}<a href="{{ url_for('admin.dashboard') }}">Dashboard</a>{% elif current_user.role != 'customer' %}<a href="{{ url_for('admin.operations') }}">Operations</a>{% endif %}
       <span class="nav-user">{{ current_user.full_name }}</span>
       <form class="inline" method="post" action="{{ url_for('auth.logout') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="link-button">Logout</button></form>
