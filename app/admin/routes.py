@@ -1,6 +1,6 @@
 from functools import wraps
 from datetime import datetime, timedelta
-from flask import Blueprint, render_template, request, redirect, url_for, flash, abort, current_app
+from flask import Blueprint, render_template, request, redirect, url_for, flash, abort, current_app, jsonify
 from flask_login import login_required, current_user
 from sqlalchemy import func
 from ..extensions import db, emit_event
@@ -9,6 +9,8 @@ from ..uploads import save_image, delete_image, ImageUploadError
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
 ORDER_STATES = {"pending", "accepted", "preparing", "ready", "served", "completed", "cancelled"}
+# A served order is a completed sale even before the status is changed to completed.
+SALES_STATUSES = ("served", "completed")
 
 def roles_required(*roles):
     def decorator(fn):
@@ -24,13 +26,63 @@ def roles_required(*roles):
 def audit(action, entity_type=None, entity_id=None, details=None):
     db.session.add(AuditLog(user_id=current_user.id, action=action, entity_type=entity_type, entity_id=str(entity_id) if entity_id is not None else None, details=details))
 
+def report_snapshot():
+    """Return live sales totals and served-product aggregates.
+
+    Served orders count as sales immediately so the dashboard and reports
+    update as soon as service marks an order as served.
+    """
+    status_filter = Order.status.in_(SALES_STATUSES)
+    total_cents, order_count = db.session.query(
+        func.coalesce(func.sum(Order.total_cents), 0),
+        func.count(Order.id),
+    ).filter(status_filter).one()
+    items_served, items_value_cents = db.session.query(
+        func.coalesce(func.sum(OrderItem.quantity), 0),
+        func.coalesce(func.sum(OrderItem.line_total_cents), 0),
+    ).join(Order).filter(status_filter).one()
+    product_rows = db.session.query(
+        OrderItem.product_name_snapshot,
+        func.sum(OrderItem.quantity),
+        func.sum(OrderItem.line_total_cents),
+    ).join(Order).filter(status_filter).group_by(OrderItem.product_name_snapshot).order_by(
+        func.sum(OrderItem.line_total_cents).desc(), OrderItem.product_name_snapshot.asc()
+    ).all()
+    by_status = db.session.query(Order.status, func.count(Order.id)).group_by(Order.status).order_by(Order.status).all()
+
+    today_start = datetime.combine(datetime.utcnow().date(), datetime.min.time())
+    today_total_cents, today_order_count = db.session.query(
+        func.coalesce(func.sum(Order.total_cents), 0),
+        func.count(Order.id),
+    ).filter(status_filter, Order.created_at >= today_start).one()
+    today_items_served = db.session.query(
+        func.coalesce(func.sum(OrderItem.quantity), 0)
+    ).join(Order).filter(status_filter, Order.created_at >= today_start).scalar()
+
+    return {
+        "total_cents": int(total_cents),
+        "order_count": int(order_count),
+        "items_served": int(items_served),
+        "items_value_cents": int(items_value_cents),
+        "products": [
+            {"name": name, "quantity": int(quantity), "total_cents": int(value)}
+            for name, quantity, value in product_rows
+        ],
+        "by_status": [(status, int(count)) for status, count in by_status],
+        "today": {
+            "total_cents": int(today_total_cents),
+            "order_count": int(today_order_count),
+            "items_served": int(today_items_served),
+        },
+    }
+
 @admin_bp.get("/dashboard")
 @roles_required("admin", "supervisor")
 def dashboard():
     today = datetime.utcnow().date()
     start = datetime.combine(today, datetime.min.time())
     orders_today = Order.query.filter(Order.created_at >= start, Order.status != "cancelled").all()
-    sales = sum(o.total_cents for o in orders_today if o.status == "completed")
+    sales = sum(o.total_cents for o in orders_today if o.status in SALES_STATUSES)
     return render_template("admin/dashboard.html",
         sales=sales, orders_today=len(orders_today),
         pending=Order.query.filter_by(status="pending").count(),
@@ -328,7 +380,36 @@ def customers():
 @admin_bp.get("/reports")
 @roles_required("admin", "supervisor")
 def reports():
-    orders = Order.query.filter(Order.status == "completed").order_by(Order.created_at.desc()).all()
-    by_status = db.session.query(Order.status, func.count(Order.id)).group_by(Order.status).all()
-    total = sum(o.total_cents for o in orders)
-    return render_template("admin/reports.html", orders=orders, total=total, by_status=by_status)
+    snapshot = report_snapshot()
+    orders = Order.query.filter(Order.status.in_(SALES_STATUSES)).order_by(Order.created_at.desc()).limit(100).all()
+    return render_template("admin/reports.html", orders=orders, total=snapshot["total_cents"],
+                           order_count=snapshot["order_count"], items_served=snapshot["items_served"],
+                           products=snapshot["products"], by_status=snapshot["by_status"])
+
+@admin_bp.get("/reports/live")
+@roles_required("admin", "supervisor")
+def reports_live():
+    snapshot = report_snapshot()
+    orders = Order.query.filter(Order.status.in_(SALES_STATUSES)).order_by(Order.created_at.desc()).limit(100).all()
+    response = jsonify({
+        "currency": current_app.config["CURRENCY"],
+        "all_time": {
+            "total_cents": snapshot["total_cents"],
+            "order_count": snapshot["order_count"],
+            "items_served": snapshot["items_served"],
+            "items_value_cents": snapshot["items_value_cents"],
+        },
+        "today": snapshot["today"],
+        "by_status": [{"status": status, "count": count} for status, count in snapshot["by_status"]],
+        "products": snapshot["products"],
+        "orders": [{
+            "order_number": order.order_number,
+            "customer": order.customer.full_name,
+            "date": order.created_at.strftime("%d %b %Y %H:%M"),
+            "status": order.status,
+            "total_cents": order.total_cents,
+            "items": [{"name": item.product_name_snapshot, "quantity": item.quantity} for item in order.items],
+        } for order in orders],
+    })
+    response.headers["Cache-Control"] = "no-store"
+    return response

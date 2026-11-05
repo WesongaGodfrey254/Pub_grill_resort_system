@@ -12,7 +12,7 @@ A Flask + PostgreSQL management system with customer accounts, role-based staff/
 - Order creation, order history, status history and Socket.IO broadcasts.
 - Staff order dashboard, employee account management and audit logs.
 - Rooms with hourly/daily/weekly rates, reservation overlap checks, maintenance blocks, cancellations, check-in/out.
-- Basic sales/status reports, low-stock indicators and notifications.
+- Sales/status reports where served and completed orders both count as completed sales, with live totals and served-product details, plus low-stock indicators and notifications.
 - CSRF protection on forms, ORM queries, environment-based secret configuration.
 - PostgreSQL database (via `psycopg`) with migration-ready Flask-Migrate setup.
 
@@ -101,6 +101,8 @@ Set these in **Vercel → Project → Settings → Environment Variables** for b
 | `REALTIME_ENABLED` | `false` on Vercel; Socket.IO is disabled on serverless. |
 | `AUTO_CREATE_TABLES` | `true` to create missing tables on startup. |
 | `TRUSTED_HOSTS` | Comma-separated allowed hostnames (`.vercel.app,<custom-domain>`). |
+
+Because Socket.IO is unavailable on Vercel, the dashboard sales figure and the reports page poll the read-only `/admin/reports/live` endpoint every 10 seconds, so served orders appear in totals and product details automatically.
 
 `VERCEL` is set automatically by the platform and switches the app to serverless mode: secure cookies, `NullPool` for the Neon pooler, no Socket.IO, and no writable `instance/` directory.
 
